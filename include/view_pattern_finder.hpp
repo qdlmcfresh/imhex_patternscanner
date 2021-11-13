@@ -26,10 +26,12 @@ public:
 private:
     std::string m_pattern;
     std::string m_mask;
+    std::vector<u8> m_pattern_vec;
     u32 m_pattern_size = 0;
     std::vector<u64> m_results;
     bool m_searching = false;
     bool m_matching_pattern = false;
+    bool m_matching_mask = false;
 
     static std::vector<u16> ConvertIDAPatternToByteVector(const std::string &pattern);
     void FindPattern(const std::vector<u16> &pattern);

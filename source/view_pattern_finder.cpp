@@ -144,13 +144,10 @@ void PatternFinderView::search()
         std::thread([this]
                     {
                         this->m_searching = true;
-                        auto p = PatternFinderView::ConvertIDAPatternToByteVector(this->m_pattern);
-                        std::vector<u8> pattern(p.begin(), p.end());
                         std::vector<u8> mask(this->m_mask.begin(), this->m_mask.end());
-                        this->m_pattern_size = pattern.size();
-                        if (this->m_pattern_size > 0)
+                        if (this->m_pattern_vec.size() > 0)
                         {
-                            findPattern(pattern, mask);
+                            findPattern(this->m_pattern_vec, mask);
                         }
                         this->m_searching = false;
                     })
@@ -169,23 +166,28 @@ void PatternFinderView::drawContent()
             ImGui::Text("Patternformat: DE AD BE ?? 01 02 03");
             ImGui::Disabled([this]
                             {
-                                bool pattern_matching = false;
                                 ImGui::InputText(
                                     "Pattern", this->m_pattern.data(), this->m_pattern.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
                                     {
                                         const std::regex pattern_regex("([a-fA-F0-9]{2}\\s*){2,}");
                                         auto &view = *static_cast<PatternFinderView *>(data->UserData);
                                         view.m_pattern.resize(data->BufTextLen);
-                                        view.m_matching_pattern = std::regex_match(data->Buf, pattern_regex);
+                                        if (view.m_matching_pattern = std::regex_match(data->Buf, pattern_regex))
+                                        {
+                                            auto p = PatternFinderView::ConvertIDAPatternToByteVector(std::string(data->Buf));
+                                            view.m_pattern_vec = std::vector<u8>(p.begin(), p.end());
+                                        }
+
                                         return 0;
                                     },
                                     this);
-                                bool mask_matching = false;
                                 ImGui::InputText(
                                     "Mask", this->m_mask.data(), this->m_mask.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
                                     {
                                         auto &view = *static_cast<PatternFinderView *>(data->UserData);
+                                        const std::regex mask_regex(fmt::format("[.<>!?]{{{}}}", view.m_pattern_vec.size()));
                                         view.m_mask.resize(data->BufTextLen);
+                                        view.m_matching_mask = std::regex_match(data->Buf, mask_regex);
                                         return 0;
                                     },
                                     this);
@@ -196,7 +198,7 @@ void PatternFinderView::drawContent()
                                                         this->search();
                                                     }
                                                 },
-                                                !this->m_matching_pattern);
+                                                !(this->m_matching_mask && this->m_matching_pattern));
                             },
                             this->m_searching);
             if (this->m_searching)
