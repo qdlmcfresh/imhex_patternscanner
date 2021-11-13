@@ -1,0 +1,3 @@
+[submodule "extern/Sig"]
+	path = extern/Sig
+	url = https://github.com/HoShiMin/Sig
