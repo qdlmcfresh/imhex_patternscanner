@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Change this to the name of your plugin #
-project(pattern_finder)
+project(imhex_patternscanner)
 
 # Add your source files here #
 add_library(${PROJECT_NAME} SHARED
@@ -10,7 +10,7 @@ add_library(${PROJECT_NAME} SHARED
 )
 
 # Add additional include directories here #
-target_include_directories(${PROJECT_NAME} PRIVATE include extern)
+target_include_directories(${PROJECT_NAME} PRIVATE include)
 # Add additional libraries here #
 target_link_libraries(${PROJECT_NAME} PRIVATE libimhex)
 

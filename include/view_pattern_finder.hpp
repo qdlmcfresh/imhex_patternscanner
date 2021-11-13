@@ -7,6 +7,15 @@
 #include <thread>
 #include <regex>
 
+enum class MaskType : char
+{
+    EQ = '.',
+    GT = '>',
+    LT = '<',
+    NOT = '!',
+    ANY = '?'
+};
+
 class PatternFinderView : public hex::View
 {
 public:
@@ -24,5 +33,6 @@ private:
 
     static std::vector<u16> ConvertIDAPatternToByteVector(const std::string &pattern);
     void FindPattern(const std::vector<u16> &pattern);
+    void findPattern(const std::vector<u8> &pattern, const std::vector<u8> &mask);
     void search();
 };

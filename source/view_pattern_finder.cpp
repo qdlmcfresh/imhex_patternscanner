@@ -1,5 +1,4 @@
 #include "view_pattern_finder.hpp"
-#include "extern/Sig/include/Sig/Sig.hpp"
 
 PatternFinderView::PatternFinderView() : hex::View("Pattern Finder")
 {
@@ -16,7 +15,6 @@ PatternFinderView::~PatternFinderView()
 {
     hex::EventManager::unsubscribe<hex::EventDataChanged>(this);
 }
-
 std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std::string &pattern)
 {
     std::vector<u16> byteBuffer;
@@ -42,7 +40,7 @@ std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std
     return byteBuffer;
 }
 
-void PatternFinderView::FindPattern(const std::vector<uint16_t> &pattern, const std::)
+void PatternFinderView::findPattern(const std::vector<u8> &pattern, const std::vector<u8> &mask)
 {
     this->m_results.clear();
     std::vector<u64> results;
@@ -54,52 +52,110 @@ void PatternFinderView::FindPattern(const std::vector<uint16_t> &pattern, const 
         {
             u8 buffer[pattern.size()];
             provider->readRaw(offset, buffer, pattern.size());
-            void *p = Sig::find<
-                Sig::Mask::Eq<'.'>,
-                Sig::Mask::NotEq<'!'>,
-                Sig::Mask::Any<'?'>,
-                Sig::Mask::Gr<'>'>,
-                Sig::Mask::Le<'<'>>(buffer, sizeof(buffer), this->m_pattern, this->m_mask);
-            if (p)
+            bool succ = true;
+            for (auto i = 0u; i < pattern.size(); i++)
+            {
+                if (mask[i] == (char)MaskType::ANY)
+                {
+                    continue;
+                }
+                else if (mask[i] == (char)MaskType::EQ)
+                {
+                    if (buffer[i] != pattern[i])
+                    {
+                        succ = false;
+                        break;
+                    }
+                }
+                else if (mask[i] == (char)MaskType::GT)
+                {
+                    if (buffer[i] <= pattern[i])
+                    {
+                        succ = false;
+                        break;
+                    }
+                }
+                else if (mask[i] == (char)MaskType::LT)
+                {
+                    if (buffer[i] >= pattern[i])
+                    {
+                        succ = false;
+                        break;
+                    }
+                }
+                else if (mask[i] == (char)MaskType::NOT)
+                {
+                    if (buffer[i] == pattern[i])
+                    {
+                        succ = false;
+                        break;
+                    }
+                }
+                else
+                {
+                    hex::log::error("Non masked character in mask {}", mask[i]);
+                    return;
+                }
+            }
+            if (succ)
             {
                 m_results.push_back(offset);
             }
-            // bool succ = true;
-            // for (auto i = 0u; i < pattern.size(); i++)
-            // {
-            //     if (buffer[i] != pattern[i])
-            //     {
-            //         if (pattern[i] != 256u)
-            //         {
-            //             succ = false;
-            //             break;
-            //         }
-            //     }
-            // }
-            // if (succ)
-            // {
-            //     m_results.push_back(offset);
-            // }
         }
     }
 }
 
-void PatternFinderView::search() if (this->m_pattern.size() > 0)
+void PatternFinderView::FindPattern(const std::vector<uint16_t> &pattern)
 {
-    std::thread([this]
+    this->m_results.clear();
+    std::vector<u64> results;
+    auto provider = hex::ImHexApi::Provider::get();
+
+    if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
+    {
+        for (auto offset = 0; offset <= provider->getSize() - pattern.size(); ++offset)
+        {
+            u8 buffer[pattern.size()];
+            provider->readRaw(offset, buffer, pattern.size());
+            bool succ = true;
+            for (auto i = 0u; i < pattern.size(); i++)
+            {
+                if (buffer[i] != pattern[i])
                 {
-                    this->m_searching = true;
-                    auto pattern = ConvertIDAPatternToByteVector(this->m_pattern);
-                    this->m_pattern_size = pattern.size();
-                    if (this->m_pattern_size > 0)
+                    if (pattern[i] != 256u)
                     {
-                        FindPattern(pattern);
+                        succ = false;
+                        break;
                     }
-                    this->m_searching = false;
-                })
-        .detach();
+                }
+            }
+            if (succ)
+            {
+                m_results.push_back(offset);
+            }
+        }
+    }
 }
-}
+
+void PatternFinderView::search()
+{
+    if (this->m_pattern.size() > 0)
+    {
+        std::thread([this]
+                    {
+                        this->m_searching = true;
+                        auto p = PatternFinderView::ConvertIDAPatternToByteVector(this->m_pattern);
+                        std::vector<u8> pattern(p.begin(), p.end());
+                        std::vector<u8> mask(this->m_mask.begin(), this->m_mask.end());
+                        this->m_pattern_size = pattern.size();
+                        if (this->m_pattern_size > 0)
+                        {
+                            findPattern(pattern, mask);
+                        }
+                        this->m_searching = false;
+                    })
+            .detach();
+    }
 }
 
 void PatternFinderView::drawContent()
@@ -113,23 +169,23 @@ void PatternFinderView::drawContent()
             ImGui::Text("Patternformat: DE AD BE ?? 01 02 03");
             ImGui::Disabled([this]
                             {
+                                bool pattern_matching = false;
                                 ImGui::InputText(
                                     "Pattern", this->m_pattern.data(), this->m_pattern.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
                                     {
-                                        const std::regex pattern_regex("([a-fA-F0-9]{2}\\s|\\?{2}\\s)+([a-fA-F0-9]{2}|\\?{2})\\s*$");
+                                        const std::regex pattern_regex("([a-fA-F0-9]{2}\\s*){2,}");
                                         auto &view = *static_cast<PatternFinderView *>(data->UserData);
                                         view.m_pattern.resize(data->BufTextLen);
                                         view.m_matching_pattern = std::regex_match(data->Buf, pattern_regex);
                                         return 0;
                                     },
                                     this);
+                                bool mask_matching = false;
                                 ImGui::InputText(
-                                    "Pattern", this->m_mask.data(), this->m_mask.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
+                                    "Mask", this->m_mask.data(), this->m_mask.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
                                     {
-                                        const std::regex pattern_regex("([a-fA-F0-9]{2}\\s|\\?{2}\\s)+([a-fA-F0-9]{2}|\\?{2})\\s*$");
                                         auto &view = *static_cast<PatternFinderView *>(data->UserData);
                                         view.m_mask.resize(data->BufTextLen);
-                                        view.m_matching_pattern = std::regex_match(data->Buf, pattern_regex);
                                         return 0;
                                     },
                                     this);
@@ -140,8 +196,7 @@ void PatternFinderView::drawContent()
                                                         this->search();
                                                     }
                                                 },
-                                                false);
-                                //!this->m_matching_pattern);
+                                                !this->m_matching_pattern);
                             },
                             this->m_searching);
             if (this->m_searching)
