@@ -1,4 +1,5 @@
 #include "view_pattern_finder.hpp"
+#include "extern/Sig/include/Sig/Sig.hpp"
 
 PatternFinderView::PatternFinderView() : hex::View("Pattern Finder")
 {
@@ -41,54 +42,64 @@ std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std
     return byteBuffer;
 }
 
-void PatternFinderView::FindPattern(const std::vector<uint16_t> &pattern)
+void PatternFinderView::FindPattern(const std::vector<uint16_t> &pattern, const std::)
 {
     this->m_results.clear();
-    std::vector<uint64_t> results;
+    std::vector<u64> results;
     auto provider = hex::ImHexApi::Provider::get();
+
     if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
     {
         for (auto offset = 0; offset <= provider->getSize() - pattern.size(); ++offset)
         {
-            uint8_t buffer[pattern.size()];
+            u8 buffer[pattern.size()];
             provider->readRaw(offset, buffer, pattern.size());
-            bool succ = true;
-            for (auto i = 0u; i < pattern.size(); i++)
-            {
-                if (buffer[i] != pattern[i])
-                {
-                    if (pattern[i] != 256u)
-                    {
-                        succ = false;
-                        break;
-                    }
-                }
-            }
-            if (succ)
+            void *p = Sig::find<
+                Sig::Mask::Eq<'.'>,
+                Sig::Mask::NotEq<'!'>,
+                Sig::Mask::Any<'?'>,
+                Sig::Mask::Gr<'>'>,
+                Sig::Mask::Le<'<'>>(buffer, sizeof(buffer), this->m_pattern, this->m_mask);
+            if (p)
             {
                 m_results.push_back(offset);
             }
+            // bool succ = true;
+            // for (auto i = 0u; i < pattern.size(); i++)
+            // {
+            //     if (buffer[i] != pattern[i])
+            //     {
+            //         if (pattern[i] != 256u)
+            //         {
+            //             succ = false;
+            //             break;
+            //         }
+            //     }
+            // }
+            // if (succ)
+            // {
+            //     m_results.push_back(offset);
+            // }
         }
     }
 }
 
-void PatternFinderView::search()
+void PatternFinderView::search() if (this->m_pattern.size() > 0)
 {
-    if (this->m_pattern.size() > 0)
-    {
-        std::thread([this]
+    std::thread([this]
+                {
+                    this->m_searching = true;
+                    auto pattern = ConvertIDAPatternToByteVector(this->m_pattern);
+                    this->m_pattern_size = pattern.size();
+                    if (this->m_pattern_size > 0)
                     {
-                        this->m_searching = true;
-                        auto pattern = ConvertIDAPatternToByteVector(this->m_pattern);
-                        this->m_pattern_size = pattern.size();
-                        if (this->m_pattern_size > 0)
-                        {
-                            FindPattern(pattern);
-                        }
-                        this->m_searching = false;
-                    })
-            .detach();
-    }
+                        FindPattern(pattern);
+                    }
+                    this->m_searching = false;
+                })
+        .detach();
+}
+}
 }
 
 void PatternFinderView::drawContent()
@@ -112,6 +123,16 @@ void PatternFinderView::drawContent()
                                         return 0;
                                     },
                                     this);
+                                ImGui::InputText(
+                                    "Pattern", this->m_mask.data(), this->m_mask.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
+                                    {
+                                        const std::regex pattern_regex("([a-fA-F0-9]{2}\\s|\\?{2}\\s)+([a-fA-F0-9]{2}|\\?{2})\\s*$");
+                                        auto &view = *static_cast<PatternFinderView *>(data->UserData);
+                                        view.m_mask.resize(data->BufTextLen);
+                                        view.m_matching_pattern = std::regex_match(data->Buf, pattern_regex);
+                                        return 0;
+                                    },
+                                    this);
                                 ImGui::Disabled([this]
                                                 {
                                                     if (ImGui::Button("Find All"))
@@ -119,7 +140,8 @@ void PatternFinderView::drawContent()
                                                         this->search();
                                                     }
                                                 },
-                                                !this->m_matching_pattern);
+                                                false);
+                                //!this->m_matching_pattern);
                             },
                             this->m_searching);
             if (this->m_searching)

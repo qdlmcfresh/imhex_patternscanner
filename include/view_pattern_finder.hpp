@@ -16,6 +16,7 @@ public:
 
 private:
     std::string m_pattern;
+    std::string m_mask;
     u32 m_pattern_size = 0;
     std::vector<u64> m_results;
     bool m_searching = false;
