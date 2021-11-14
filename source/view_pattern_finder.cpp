@@ -171,12 +171,13 @@ void PatternFinderView::drawContent()
     {
         if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
         {
-            ImGui::Checkbox("Advanced mask", &this->m_advanced_mode);
+            ImGui::Checkbox("Masked search", &this->m_advanced_mode);
             if (ImGui::CollapsingHeader("Help"))
             {
                 if (!this->m_advanced_mode)
                 {
                     ImGui::Text("Patternformat: DE AD BE ?? 01 02 03");
+                    ImGui::Text("?? is a wildcard and matches any byte");
                 }
                 else
                 {
