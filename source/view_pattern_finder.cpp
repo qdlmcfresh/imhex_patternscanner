@@ -6,7 +6,6 @@ PatternFinderView::PatternFinderView() : hex::View("Pattern Finder")
                                                         {
                                                             this->m_pattern.clear();
                                                             this->m_results.clear();
-                                                            this->m_pattern_size = 0;
                                                         });
     this->m_pattern.reserve(0xFFFF);
     this->m_mask.reserve(0xFFFF);

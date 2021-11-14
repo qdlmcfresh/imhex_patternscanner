@@ -28,7 +28,6 @@ private:
     std::string m_mask;
     std::vector<u16> m_pattern_vec;
     std::vector<u64> m_results;
-    u32 m_pattern_size = 0;
     bool m_searching = false;
     bool m_matching_pattern = false;
     bool m_matching_mask = false;
