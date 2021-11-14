@@ -9,6 +9,7 @@ PatternFinderView::PatternFinderView() : hex::View("Pattern Finder")
                                                             this->m_pattern_size = 0;
                                                         });
     this->m_pattern.reserve(0xFFFF);
+    this->m_mask.reserve(0xFFFF);
     std::memset(this->m_pattern.data(), 0x00, this->m_pattern.capacity());
 }
 PatternFinderView::~PatternFinderView()
@@ -40,7 +41,7 @@ std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std
     return byteBuffer;
 }
 
-void PatternFinderView::findPattern(const std::vector<u8> &pattern, const std::vector<u8> &mask)
+void PatternFinderView::FindPattern(const std::vector<u16> &pattern, const std::vector<u8> &mask)
 {
     this->m_results.clear();
     std::vector<u64> results;
@@ -144,11 +145,19 @@ void PatternFinderView::search()
         std::thread([this]
                     {
                         this->m_searching = true;
-                        std::vector<u8> mask(this->m_mask.begin(), this->m_mask.end());
-                        if (this->m_pattern_vec.size() > 0)
+                        if (this->m_advanced_mode)
                         {
-                            findPattern(this->m_pattern_vec, mask);
+                            std::vector<u8> mask(this->m_mask.begin(), this->m_mask.end());
+                            if (this->m_pattern_vec.size() > 0)
+                            {
+                                FindPattern(this->m_pattern_vec, mask);
+                            }
                         }
+                        else
+                        {
+                            FindPattern(this->m_pattern_vec);
+                        }
+
                         this->m_searching = false;
                     })
             .detach();
@@ -163,34 +172,52 @@ void PatternFinderView::drawContent()
     {
         if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
         {
-            ImGui::Text("Patternformat: DE AD BE ?? 01 02 03");
+            ImGui::Checkbox("Advanced mask", &this->m_advanced_mode);
+            if (ImGui::CollapsingHeader("Help"))
+            {
+                if (!this->m_advanced_mode)
+                {
+                    ImGui::Text("Patternformat: DE AD BE ?? 01 02 03");
+                }
+                else
+                {
+                    ImGui::Text("Patternformat: DE AD BE EF 01 02 03");
+                    ImGui::Text("Maskformat: ..?.<>!");
+                    ImGui::Text(".: match equal");
+                    ImGui::Text("?: match any");
+                    ImGui::Text("!: match not");
+                    ImGui::Text("<: match less");
+                    ImGui::Text(">: match greater");
+                }
+            }
             ImGui::Disabled([this]
                             {
                                 ImGui::InputText(
                                     "Pattern", this->m_pattern.data(), this->m_pattern.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
                                     {
-                                        const std::regex pattern_regex("([a-fA-F0-9]{2}\\s*){2,}");
                                         auto &view = *static_cast<PatternFinderView *>(data->UserData);
+                                        const auto pattern_regex = view.m_advanced_mode ? view.advanced_pattern_regex : view.simple_pattern_regex;
                                         view.m_pattern.resize(data->BufTextLen);
                                         if (view.m_matching_pattern = std::regex_match(data->Buf, pattern_regex))
                                         {
-                                            auto p = PatternFinderView::ConvertIDAPatternToByteVector(std::string(data->Buf));
-                                            view.m_pattern_vec = std::vector<u8>(p.begin(), p.end());
+                                            view.m_pattern_vec = PatternFinderView::ConvertIDAPatternToByteVector(std::string(data->Buf));
                                         }
-
                                         return 0;
                                     },
                                     this);
-                                ImGui::InputText(
-                                    "Mask", this->m_mask.data(), this->m_mask.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
-                                    {
-                                        auto &view = *static_cast<PatternFinderView *>(data->UserData);
-                                        const std::regex mask_regex(fmt::format("[.<>!?]{{{}}}", view.m_pattern_vec.size()));
-                                        view.m_mask.resize(data->BufTextLen);
-                                        view.m_matching_mask = std::regex_match(data->Buf, mask_regex);
-                                        return 0;
-                                    },
-                                    this);
+                                if (this->m_advanced_mode)
+                                {
+                                    ImGui::InputText(
+                                        "Mask", this->m_mask.data(), this->m_mask.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
+                                        {
+                                            auto &view = *static_cast<PatternFinderView *>(data->UserData);
+                                            const std::regex mask_regex(fmt::format("[.<>!?]{{{}}}", view.m_pattern_vec.size()));
+                                            view.m_mask.resize(data->BufTextLen);
+                                            view.m_matching_mask = std::regex_match(data->Buf, mask_regex);
+                                            return 0;
+                                        },
+                                        this);
+                                }
                                 ImGui::Disabled([this]
                                                 {
                                                     if (ImGui::Button("Find All"))
@@ -198,7 +225,7 @@ void PatternFinderView::drawContent()
                                                         this->search();
                                                     }
                                                 },
-                                                !(this->m_matching_mask && this->m_matching_pattern));
+                                                !(this->m_matching_pattern && (!this->m_advanced_mode || this->m_matching_mask)));
                             },
                             this->m_searching);
             if (this->m_searching)
@@ -222,7 +249,7 @@ void PatternFinderView::drawContent()
                         ImGui::TableNextColumn();
                         if (ImGui::Selectable(("##StringLine" + std::to_string(i)).c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
                         {
-                            hex::EventManager::post<hex::RequestSelectionChange>(hex::Region{m_results[i], m_pattern_size});
+                            hex::EventManager::post<hex::RequestSelectionChange>(hex::Region{m_results[i], this->m_pattern_vec.size()});
                         }
                         ImGui::SameLine();
                         ImGui::Text("0x%08lx", this->m_results[i]);

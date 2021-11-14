@@ -26,15 +26,18 @@ public:
 private:
     std::string m_pattern;
     std::string m_mask;
-    std::vector<u8> m_pattern_vec;
-    u32 m_pattern_size = 0;
+    std::vector<u16> m_pattern_vec;
     std::vector<u64> m_results;
+    u32 m_pattern_size = 0;
     bool m_searching = false;
     bool m_matching_pattern = false;
     bool m_matching_mask = false;
+    bool m_advanced_mode = false;
+    const std::regex advanced_pattern_regex{"([a-fA-F0-9]{2}\\s*){2,}"};
+    const std::regex simple_pattern_regex{"([a-fA-F0-9]{2}\\s|\\?{2}\\s)+([a-fA-F0-9]{2}|\\?{2})\\s*$"};
 
     static std::vector<u16> ConvertIDAPatternToByteVector(const std::string &pattern);
     void FindPattern(const std::vector<u16> &pattern);
-    void findPattern(const std::vector<u8> &pattern, const std::vector<u8> &mask);
+    void FindPattern(const std::vector<u16> &pattern, const std::vector<u8> &mask);
     void search();
 };
