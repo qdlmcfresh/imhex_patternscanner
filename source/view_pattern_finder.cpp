@@ -17,7 +17,7 @@ PatternFinderView::~PatternFinderView()
 }
 std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std::string &pattern)
 {
-    std::vector<u16> byteBuffer;
+    std::vector<u16> buffer;
 
     for (auto i = pattern.cbegin(); i != pattern.cend(); ++i)
     {
@@ -28,16 +28,16 @@ std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std
         {
             if (*(i + 1) == '?')
                 ++i;
-            byteBuffer.push_back(256u);
+            buffer.push_back(256u);
         }
         else
         {
-            byteBuffer.push_back(strtol(&pattern[distance(pattern.cbegin(), i)], nullptr, 16));
+            buffer.push_back(strtol(&pattern[distance(pattern.cbegin(), i)], nullptr, 16));
             ++i;
         }
     }
 
-    return byteBuffer;
+    return buffer;
 }
 
 void PatternFinderView::FindPattern(const std::vector<u16> &pattern, const std::vector<u8> &mask)
