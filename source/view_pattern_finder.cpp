@@ -257,6 +257,12 @@ void PatternFinderView::drawContent()
                 {
                     ImGui::TableSetupScrollFreeze(0, 1);
                     ImGui::TableSetupColumn("Offset", 0, -1, ImGui::GetID("offset"));
+                    auto sortSpecs = ImGui::TableGetSortSpecs();
+                    if (sortSpecs->SpecsDirty)
+                    {
+                        std::sort(this->m_results.begin(), this->m_results.end(), [sortSpecs](const auto &a, const auto &b)
+                                  { return sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending ? a < b : a > b; });
+                    }
                     ImGui::TableHeadersRow();
                     ImGuiListClipper clipper;
                     clipper.Begin(this->m_results.size());
