@@ -15,139 +15,6 @@ PatternFinderView::~PatternFinderView()
 {
     hex::EventManager::unsubscribe<hex::EventDataChanged>(this);
 }
-std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std::string &pattern)
-{
-    std::vector<u16> buffer;
-
-    for (auto i = pattern.cbegin(); i != pattern.cend(); ++i)
-    {
-        if (*i == ' ')
-            continue;
-
-        if (*i == '?')
-        {
-            if (*(i + 1) == '?')
-                ++i;
-            buffer.push_back(256u);
-        }
-        else
-        {
-            buffer.push_back(strtol(&pattern[distance(pattern.cbegin(), i)], nullptr, 16));
-            ++i;
-        }
-    }
-
-    return buffer;
-}
-
-void PatternFinderView::FindPattern(const std::vector<u16> &pattern, const std::vector<u8> &mask)
-{
-    this->m_results.clear();
-    auto provider = hex::ImHexApi::Provider::get();
-    size_t bufferSize = std::min(provider->getSize(), 0xFFFFlu);
-    u8 buffer[bufferSize];
-    hex::log::debug("Buffersize {} bytes", bufferSize);
-    if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
-    {
-        u16 matching_bytes = 0;
-        for (auto offset = 0; offset <= provider->getSize() - pattern.size(); offset += bufferSize)
-        {
-            size_t readSize = std::min(bufferSize, provider->getSize() - offset);
-            provider->readRaw(offset, buffer, readSize);
-            for (auto i = 0u; i < readSize - pattern.size(); i++)
-            {
-                for (auto j = 0u; j < pattern.size(); j++)
-                {
-                    bool match = false;
-                    switch ((MaskType)mask[j])
-                    {
-                    case MaskType::ANY:
-                    {
-                        match = true;
-                        break;
-                    }
-                    case MaskType::EQ:
-                    {
-                        match = (buffer[i + j] == pattern[j]);
-                        break;
-                    }
-                    case MaskType::NEQ:
-                    {
-                        match = (buffer[i + j] != pattern[j]);
-                        break;
-                    }
-                    case MaskType::GT:
-                    {
-                        match = (buffer[i + j] > pattern[j]);
-                        break;
-                    }
-                    case MaskType::LT:
-                    {
-                        match = (buffer[i + j] < pattern[j]);
-                        break;
-                    }
-                    }
-                    if (!match)
-                    {
-                        matching_bytes = 0;
-                        break;
-                    }
-                    else
-                        ++matching_bytes;
-                }
-                if (matching_bytes == pattern.size())
-                {
-                    this->m_results.push_back(offset + i);
-                    matching_bytes = 0;
-                }
-            }
-        }
-    }
-}
-
-void PatternFinderView::FindPattern(const std::vector<uint16_t> &pattern)
-{
-    this->m_results.clear();
-    auto provider = hex::ImHexApi::Provider::get();
-    size_t bufferSize = std::min(provider->getSize(), 0xFFFFlu);
-    u8 buffer[bufferSize];
-    hex::log::debug("Buffersize {} bytes", bufferSize);
-    if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
-    {
-        u16 matching_bytes = 0;
-        for (auto offset = 0; offset <= provider->getSize() - pattern.size(); offset += bufferSize)
-        {
-            size_t readSize = std::min(bufferSize, provider->getSize() - offset);
-            provider->readRaw(offset, buffer, readSize);
-            for (auto i = 0u; i < readSize - pattern.size(); i++)
-            {
-                for (auto j = 0u; j < pattern.size(); j++)
-                {
-                    if (pattern[j] == 256u)
-                    {
-                        matching_bytes++;
-                        continue;
-                    }
-                    else if (pattern[j] == buffer[i + j])
-                    {
-                        matching_bytes++;
-                        continue;
-                    }
-                    else
-                    {
-                        matching_bytes = 0;
-                        break;
-                    }
-                }
-                if (matching_bytes == pattern.size())
-                {
-                    this->m_results.push_back(offset + i);
-                    matching_bytes = 0;
-                }
-            }
-        }
-    }
-}
 
 void PatternFinderView::search()
 {
@@ -163,12 +30,12 @@ void PatternFinderView::search()
                             std::vector<u8> mask(this->m_mask.begin(), this->m_mask.end());
                             if (this->m_pattern_vec.size() > 0)
                             {
-                                FindPattern(this->m_pattern_vec, mask);
+                                this->m_results = PatternFind::Find(this->m_pattern_vec, mask);
                             }
                         }
                         else
                         {
-                            FindPattern(this->m_pattern_vec);
+                            this->m_results = PatternFind::Find(this->m_pattern_vec);
                         }
                         auto end = std::chrono::high_resolution_clock::now();
                         this->m_search_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -212,11 +79,11 @@ void PatternFinderView::drawContent()
                                     "Pattern", this->m_pattern.data(), this->m_pattern.capacity(), ImGuiInputTextFlags_CallbackEdit, [](ImGuiInputTextCallbackData *data)
                                     {
                                         auto &view = *static_cast<PatternFinderView *>(data->UserData);
-                                        const auto pattern_regex = view.m_advanced_mode ? view.advanced_pattern_regex : view.simple_pattern_regex;
+                                        const auto pattern_regex = view.m_advanced_mode ? PatternFind::advanced_pattern_regex : PatternFind::simple_pattern_regex;
                                         view.m_pattern.resize(data->BufTextLen);
                                         if (view.m_matching_pattern = std::regex_match(data->Buf, pattern_regex))
                                         {
-                                            view.m_pattern_vec = PatternFinderView::ConvertIDAPatternToByteVector(std::string(data->Buf));
+                                            view.m_pattern_vec = PatternFind::ConvertIDAPatternToByteVector(std::string(data->Buf));
                                         }
                                         return 0;
                                     },
