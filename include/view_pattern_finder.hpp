@@ -6,13 +6,14 @@
 #include <hex/helpers/logger.hpp>
 #include <thread>
 #include <regex>
+#include <chrono>
 
 enum class MaskType : char
 {
     EQ = '.',
     GT = '>',
     LT = '<',
-    NOT = '!',
+    NEQ = '!',
     ANY = '?'
 };
 
@@ -34,7 +35,7 @@ private:
     bool m_advanced_mode = false;
     const std::regex advanced_pattern_regex{"([a-fA-F0-9]{2}\\s*){2,}"};
     const std::regex simple_pattern_regex{"([a-fA-F0-9]{2}\\s|\\?{2}\\s)+([a-fA-F0-9]{2}|\\?{2})\\s*$"};
-
+    std::chrono::milliseconds m_search_duration;
     static std::vector<u16> ConvertIDAPatternToByteVector(const std::string &pattern);
     void FindPattern(const std::vector<u16> &pattern);
     void FindPattern(const std::vector<u16> &pattern, const std::vector<u8> &mask);

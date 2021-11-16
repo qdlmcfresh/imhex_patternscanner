@@ -43,63 +43,63 @@ std::vector<uint16_t> PatternFinderView::ConvertIDAPatternToByteVector(const std
 void PatternFinderView::FindPattern(const std::vector<u16> &pattern, const std::vector<u8> &mask)
 {
     this->m_results.clear();
-    std::vector<u64> results;
     auto provider = hex::ImHexApi::Provider::get();
-
+    size_t bufferSize = std::min(provider->getSize(), 0xFFFFlu);
+    u8 buffer[bufferSize];
+    hex::log::debug("Buffersize {} bytes", bufferSize);
     if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
     {
-        for (auto offset = 0; offset <= provider->getSize() - pattern.size(); ++offset)
+        u16 matching_bytes = 0;
+        for (auto offset = 0; offset <= provider->getSize() - pattern.size(); offset += bufferSize)
         {
-            u8 buffer[pattern.size()];
-            provider->readRaw(offset, buffer, pattern.size());
-            bool succ = true;
-            for (auto i = 0u; i < pattern.size(); i++)
+            size_t readSize = std::min(bufferSize, provider->getSize() - offset);
+            provider->readRaw(offset, buffer, readSize);
+            for (auto i = 0u; i < readSize - pattern.size(); i++)
             {
-                if (mask[i] == (char)MaskType::ANY)
+                for (auto j = 0u; j < pattern.size(); j++)
                 {
-                    continue;
-                }
-                else if (mask[i] == (char)MaskType::EQ)
-                {
-                    if (buffer[i] != pattern[i])
+                    bool match = false;
+                    switch ((MaskType)mask[j])
                     {
-                        succ = false;
+                    case MaskType::ANY:
+                    {
+                        match = true;
                         break;
                     }
-                }
-                else if (mask[i] == (char)MaskType::GT)
-                {
-                    if (buffer[i] <= pattern[i])
+                    case MaskType::EQ:
                     {
-                        succ = false;
+                        match = (buffer[i + j] == pattern[j]);
                         break;
                     }
-                }
-                else if (mask[i] == (char)MaskType::LT)
-                {
-                    if (buffer[i] >= pattern[i])
+                    case MaskType::NEQ:
                     {
-                        succ = false;
+                        match = (buffer[i + j] != pattern[j]);
                         break;
                     }
-                }
-                else if (mask[i] == (char)MaskType::NOT)
-                {
-                    if (buffer[i] == pattern[i])
+                    case MaskType::GT:
                     {
-                        succ = false;
+                        match = (buffer[i + j] > pattern[j]);
                         break;
                     }
+                    case MaskType::LT:
+                    {
+                        match = (buffer[i + j] < pattern[j]);
+                        break;
+                    }
+                    }
+                    if (!match)
+                    {
+                        matching_bytes = 0;
+                        break;
+                    }
+                    else
+                        ++matching_bytes;
                 }
-                else
+                if (matching_bytes == pattern.size())
                 {
-                    hex::log::error("Non masked character in mask {}", mask[i]);
-                    return;
+                    this->m_results.push_back(offset + i);
+                    matching_bytes = 0;
                 }
-            }
-            if (succ)
-            {
-                m_results.push_back(offset);
             }
         }
     }
@@ -108,30 +108,42 @@ void PatternFinderView::FindPattern(const std::vector<u16> &pattern, const std::
 void PatternFinderView::FindPattern(const std::vector<uint16_t> &pattern)
 {
     this->m_results.clear();
-    std::vector<u64> results;
     auto provider = hex::ImHexApi::Provider::get();
-
+    size_t bufferSize = std::min(provider->getSize(), 0xFFFFlu);
+    u8 buffer[bufferSize];
+    hex::log::debug("Buffersize {} bytes", bufferSize);
     if (hex::ImHexApi::Provider::isValid() && provider->isReadable())
     {
-        for (auto offset = 0; offset <= provider->getSize() - pattern.size(); ++offset)
+        u16 matching_bytes = 0;
+        for (auto offset = 0; offset <= provider->getSize() - pattern.size(); offset += bufferSize)
         {
-            u8 buffer[pattern.size()];
-            provider->readRaw(offset, buffer, pattern.size());
-            bool succ = true;
-            for (auto i = 0u; i < pattern.size(); i++)
+            size_t readSize = std::min(bufferSize, provider->getSize() - offset);
+            provider->readRaw(offset, buffer, readSize);
+            for (auto i = 0u; i < readSize - pattern.size(); i++)
             {
-                if (buffer[i] != pattern[i])
+                for (auto j = 0u; j < pattern.size(); j++)
                 {
-                    if (pattern[i] != 256u)
+                    if (pattern[j] == 256u)
                     {
-                        succ = false;
+                        matching_bytes++;
+                        continue;
+                    }
+                    else if (pattern[j] == buffer[i + j])
+                    {
+                        matching_bytes++;
+                        continue;
+                    }
+                    else
+                    {
+                        matching_bytes = 0;
                         break;
                     }
                 }
-            }
-            if (succ)
-            {
-                m_results.push_back(offset);
+                if (matching_bytes == pattern.size())
+                {
+                    this->m_results.push_back(offset + i);
+                    matching_bytes = 0;
+                }
             }
         }
     }
@@ -141,9 +153,11 @@ void PatternFinderView::search()
 {
     if (this->m_pattern.size() > 0)
     {
+
         std::thread([this]
                     {
                         this->m_searching = true;
+                        auto start = std::chrono::high_resolution_clock::now();
                         if (this->m_advanced_mode)
                         {
                             std::vector<u8> mask(this->m_mask.begin(), this->m_mask.end());
@@ -156,7 +170,9 @@ void PatternFinderView::search()
                         {
                             FindPattern(this->m_pattern_vec);
                         }
-
+                        auto end = std::chrono::high_resolution_clock::now();
+                        this->m_search_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+                        hex::log::debug("Pattern Finder: Search took {}ms, found {}", this->m_search_duration.count(), this->m_results.size());
                         this->m_searching = false;
                     })
             .detach();
@@ -234,29 +250,33 @@ void PatternFinderView::drawContent()
                 ImGui::TextSpinner("Searching ...");
             }
 
-            if (ImGui::BeginTable("##PatternFindResults", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY))
+            if (!m_searching && m_results.size() > 0)
             {
-                ImGui::TableSetupScrollFreeze(0, 1);
-                ImGui::TableSetupColumn("Offset", 0, -1, ImGui::GetID("offset"));
-                ImGui::TableHeadersRow();
-                ImGuiListClipper clipper;
-                clipper.Begin(this->m_results.size());
-                while (clipper.Step())
+                ImGui::Text("Found %d results in %d", m_results.size(), m_search_duration.count());
+                if (ImGui::BeginTable("##PatternFindResults", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY))
                 {
-                    for (u64 i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+                    ImGui::TableSetupScrollFreeze(0, 1);
+                    ImGui::TableSetupColumn("Offset", 0, -1, ImGui::GetID("offset"));
+                    ImGui::TableHeadersRow();
+                    ImGuiListClipper clipper;
+                    clipper.Begin(this->m_results.size());
+                    while (clipper.Step())
                     {
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        if (ImGui::Selectable(("##StringLine" + std::to_string(i)).c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
+                        for (u64 i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
                         {
-                            hex::EventManager::post<hex::RequestSelectionChange>(hex::Region{m_results[i], this->m_pattern_vec.size()});
+                            ImGui::TableNextRow();
+                            ImGui::TableNextColumn();
+                            if (ImGui::Selectable(("##StringLine" + std::to_string(i)).c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
+                            {
+                                hex::EventManager::post<hex::RequestSelectionChange>(hex::Region{m_results[i], this->m_pattern_vec.size()});
+                            }
+                            ImGui::SameLine();
+                            ImGui::Text("0x%08lx", this->m_results[i]);
                         }
-                        ImGui::SameLine();
-                        ImGui::Text("0x%08lx", this->m_results[i]);
                     }
+                    clipper.End();
+                    ImGui::EndTable();
                 }
-                clipper.End();
-                ImGui::EndTable();
             }
         }
     }
