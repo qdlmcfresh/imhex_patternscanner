@@ -252,7 +252,7 @@ void PatternFinderView::drawContent()
 
             if (!m_searching && m_results.size() > 0)
             {
-                ImGui::Text("Found %d results in %d", m_results.size(), m_search_duration.count());
+                ImGui::Text("Found %d results in %d ms", m_results.size(), m_search_duration.count());
                 if (ImGui::BeginTable("##PatternFindResults", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY))
                 {
                     ImGui::TableSetupScrollFreeze(0, 1);
