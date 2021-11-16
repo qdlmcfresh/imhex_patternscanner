@@ -5,9 +5,11 @@ project(imhex_patternscanner)
 
 # Add your source files here #
 add_library(${PROJECT_NAME} SHARED
-        source/view_pattern_finder.cpp
-        source/plugin_pattern_finder.cpp
         source/pattern_find.cpp
+        source/plugin_pattern_finder.cpp
+        source/view_pattern_finder.cpp
+        
+
 )
 
 # Add additional include directories here #

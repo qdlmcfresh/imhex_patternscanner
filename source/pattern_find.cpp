@@ -1,6 +1,6 @@
 #include <pattern_find.hpp>
 
-std::vector<uint16_t> PatternFind::ConvertIDAPatternToByteVector(const std::string &pattern)
+std::vector<u16> PatternFind::ConvertIDAPatternToByteVector(const std::string &pattern)
 {
     std::vector<u16> buffer;
 
